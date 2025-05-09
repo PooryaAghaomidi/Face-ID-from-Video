@@ -1,0 +1,38 @@
+# Python bytecode files
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+venv/
+env/
+
+# VS Code settings
+.vscode/
+
+# PyCharm settings
+.idea/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Mypy cache
+.mypy_cache/
+
+# pytest cache
+.cache/
+
+# Logs
+*.log
+
+# Docker related files
+*.dockerignore
+Dockerfile*
+
+# Ignore the compiled Python files
+*.so
+
+# Environment files
+.env
+
+# Ignore the model directory
+models/

@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  face-id-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    container_name: face_id_service
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+    volumes:
+      - ./modules:/app/modules
+      - ./models:/app/models
+      - ./source:/app/source
+      - ./api.py:/app/api.py
+      - ./app.py:/app/app.py
+      - ./face_sim.py:/app/face_sim.py
+    networks:
+      - face-id-net
+    depends_on:
+      - mongo
+    ports:
+      - "5000:5000"
+
+  mongo:
+    image: mongo:latest
+    container_name: mongo_face_id
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - face-id-net
+    ports:
+      - "27017:27017"
+
+volumes:
+  mongo_data:
+
+networks:
+  face-id-net:
+    driver: bridge

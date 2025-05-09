@@ -1,0 +1,30 @@
+# config.yaml
+
+face_detector_path: "models/yolov8n-face.pt"
+mongo_ip: "localhost"
+mongo_port: 27017
+
+# Frame extraction
+every_nth: 5
+max_frames: 5
+
+# DeepFace settings
+model_name: "Facenet512"
+distance_metric: "euclidean_l2"
+enforce_detection: true
+detector_backend: "yolov8"
+threshold: null
+
+# Hardware
+device: "gpu"
+
+# Matching threshold
+distance_threshold: 0.9
+
+# usage
+port: 5000
+
+
+test:
+  face_detector_path: models/yolov8n-face.pt
+  video_path: examples/Videos/video_2025-02-22_22-54-35.mp4
