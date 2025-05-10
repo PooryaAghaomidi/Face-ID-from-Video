@@ -1,5 +1,6 @@
 import os
 import yaml
+import logging
 import tempfile
 from typing import Optional
 from face_sim import FaceIdentification
@@ -92,13 +93,20 @@ def remove_identity():
 @app.route('/face_id', methods=['POST'])
 def face_id():
     global face_identifier
+
     if face_identifier is None:
+        logging.error("Face identifier not initialized. Call /initialize first.")
         return jsonify({'error': 'System not initialized. Call /initialize first.'}), 400
 
     video_path: Optional[str] = None
 
     if 'video' in request.files:
         video_file = request.files['video']
+
+        if video_file.filename == '':
+            logging.warning("Empty video file uploaded.")
+            return jsonify({'error': 'No video file selected.'}), 400
+        
         filename = secure_filename(video_file.filename)
         video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         video_file.save(video_path)
@@ -107,11 +115,27 @@ def face_id():
         data = request.get_json()
         video_path = data.get('video_path')
 
+        if not video_path:
+            logging.warning("No video_path provided in JSON payload.")
+            return jsonify({'error': 'No video_path provided in JSON.'}), 400
+
     if not video_path or not os.path.exists(video_path):
+        logging.error(f"Invalid video path: {video_path}")
         return jsonify({'error': 'No valid video provided.'}), 400
 
-    result_json = face_identifier.face_id(video_path)
-    return jsonify({'matches': result_json})
+    try:
+        result = face_identifier.face_id(video_path)
+        logging.info(
+            f"Face ID processed successfully. "
+            f"Time: {result['time']}, Matches: {len(result['image_path'])}"
+        )
+        return jsonify({
+            "matches": result["image_path"],
+            "time": result["time"]
+            })
+    except Exception as e:
+        logging.error(f"Face ID processing failed: {str(e)}", exc_info=True)
+        return jsonify({'error': 'Internal server error during face identification.'}), 500
 
 
 @app.route('/')

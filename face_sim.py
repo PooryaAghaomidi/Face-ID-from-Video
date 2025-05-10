@@ -9,6 +9,7 @@ import json
 import torch
 import logging
 import pandas as pd
+from time import time
 import tensorflow as tf
 from typing import Optional
 from ultralytics import YOLO
@@ -148,27 +149,40 @@ class FaceIdentification:
             logging.info(f"Removed all documents from the collection.")
         self.documents = list(self.collection.find())
 
-    def face_id(self, video_path: str) -> str:
+    def face_id(self, video_path: str) -> dict:
         """
         Identifies faces from a video by matching them against a database.
 
         :param video_path: Path to the input video.
-        :return: JSON string containing identified faces.
+        :return: Dictionary containing identified faces and processing times.
+                Format: {
+                    "time": {
+                        "video_processing_time": float,
+                        "face_matching_time": float
+                    },
+                    "image_path": list[str]  # list of matched identities
+                }
         """
         logging.info(f"Extracting frames from video: {video_path}")
+        response = {
+            "time": {},
+            "image_path": []
+        }
 
+        start_video_processing = time()
         try:
             top_frames = self.preprocessor.extract_frames(video_path)
         except Exception as e:
             logging.error(f"Error during frame extraction: {e}")
-            return "[]"
+            return response
+        response["time"]["video_processing_time"] = time() - start_video_processing
 
         if not top_frames:
             logging.warning("No frames extracted, returning empty result.")
-            return "[]"
+            return response
 
+        start_face_matching = time()
         matched_faces = []
-
         for frame in top_frames:
             try:
                 df = self.identification.identify_face(image=frame, documents=self.documents)
@@ -176,19 +190,21 @@ class FaceIdentification:
                     matched_faces.append(df)
             except Exception as e:
                 logging.error(f"Error identifying face in frame: {e}")
+        response["time"]["face_matching_time"] = time() - start_face_matching
 
         if not matched_faces:
             logging.info("No faces matched, returning empty result.")
-            return "[]"
-        
+            return response
+
         try:
             final_df = pd.concat(matched_faces, ignore_index=True)
             filtered_df = final_df[final_df["distance"] < self.distance_threshold]
             filtered_df = filtered_df.sort_values(by="distance").drop_duplicates(subset="identity", keep="first")
 
             logging.info("Face identification completed successfully.")
-            return json.dumps([os.path.basename(identity) for identity in filtered_df['identity']])
+            response["image_path"] = [os.path.basename(identity) for identity in filtered_df['identity']]
         except Exception as e:
             logging.error(f"Error processing final DataFrame: {e}")
-            return "[]"
+            
+        return response
         

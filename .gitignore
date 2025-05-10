@@ -4,7 +4,6 @@ __pycache__/
 
 # Virtual environments
 venv/
-env/
 
 # VS Code settings
 .vscode/
@@ -20,19 +19,3 @@ env/
 
 # pytest cache
 .cache/
-
-# Logs
-*.log
-
-# Docker related files
-*.dockerignore
-Dockerfile*
-
-# Ignore the compiled Python files
-*.so
-
-# Environment files
-.env
-
-# Ignore the model directory
-models/

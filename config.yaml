@@ -6,7 +6,7 @@ mongo_port: 27017
 
 # Frame extraction
 every_nth: 5
-max_frames: 5
+max_frames: 1
 
 # DeepFace settings
 model_name: "Facenet512"

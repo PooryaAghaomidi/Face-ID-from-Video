@@ -19,8 +19,8 @@ execution. It allows you to:
 This project requires **Python 3.9**. Create a new virtual environment:
 
 ```sh
-python3.9 -m venv face_id_env
-source face_id_env/bin/activate  # On Windows: face_id_env\Scripts\activate
+python3.9 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 ### **Step 2: Install Dependencies**

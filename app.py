@@ -75,11 +75,23 @@ def call_face_id(video_file, progress=gr.Progress()):
         files = {"video": (os.path.basename(video_file.name), open(video_file.name, "rb"))}
         response = requests.post(f"{BASE_URL}/face_id", files=files)
         result = response.json()
+
         progress(1)
+
         matches_raw = result.get("matches", "[]")
+        time_data = result.get("time", {})
+
         matches = json.loads(matches_raw) if isinstance(matches_raw, str) else matches_raw
+        formatted_matches = [[identity] for identity in matches]
+        
+        time_str = (
+            f"Video Processing: {time_data.get('video_processing_time', 0):.2f}s\n"
+            f"Face Matching: {time_data.get('face_matching_time', 0):.2f}s\n"
+            f"Total: {sum(time_data.values()):.2f}s"
+        )
+
         progress(1)
-        return [[identity] for identity in matches]
+        return formatted_matches, time_str
     except Exception as e:
         return [f"Error: {str(e)}"]
 
@@ -106,9 +118,18 @@ with gr.Blocks() as demo:
     with gr.Tab("🎥 Identify from Video"):
         with gr.Row():
             video_input = gr.File(file_types=[".mp4"], file_count="single", label="Select a video")
+        
         identify_button = gr.Button("Identify Faces")
-        matches_output = gr.List(label="Matched Identities")
 
-        identify_button.click(fn=call_face_id, inputs=[video_input], outputs=[matches_output])
-
+        with gr.Row():
+            matches_output = gr.List(label="Matched Identities",
+                                     headers=["Identity"],
+                                     interactive=False)
+            time_output = gr.Textbox(label="Processing Time",
+                                     interactive=False)
+        
+        identify_button.click(fn=call_face_id,
+                              inputs=[video_input],
+                              outputs=[matches_output, time_output])
+        
 demo.launch(server_name="0.0.0.0", server_port=7860)

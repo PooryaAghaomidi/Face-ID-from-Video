@@ -77,7 +77,7 @@ def build_model(task: str, model_name: str) -> Any:
             "dlib": DlibDetector.DlibClient,
             "retinaface": RetinaFace.RetinaFaceClient,
             "mediapipe": MediaPipe.MediaPipeClient,
-            "yolov8": Yolo.YoloClient,
+            "yolov8": Yolo.YoloDetectorClientV8n,
             "yunet": YuNet.YuNetClient,
             "fastmtcnn": FastMtCnn.FastMtCnnClient,
             "centerface": CenterFace.CenterFaceClient,
