@@ -62,73 +62,182 @@ pip install -r requirements.txt
 
 ## Usage
 
-### **Step 1: Import the Face Identification Class**
+### Method 1: Use the code
+
+#### **Step 1: Import the Face Identification Class**
 
 ```python
 from face_sim import FaceIdentification
 ```
 
-### **Step 2: Initialize the Face Identification System**
+#### **Step 2: Initialize the Face Identification System**
 
 Create an instance of `FaceIdentification` with your desired parameters:
 
 ```python
 face_sim_class = FaceIdentification(
-    face_detector_path="path/to/yolo/model.pt",  # Path to YOLO model
-    every_nth=1,  # Extract every nth frame
-    max_frames=5,  # Maximum frames to analyze per video
-    global_folder_path=None,  # Global reference folder (set to None if using face_id)
+    face_detector_path="models/yolov8n-face.pt",  # Path to YOLO face detection model
+    every_nth=5,  # Extract every 5th frame
+    max_frames=1,  # Maximum frames to analyze per video
     model_name="Facenet512",  # Face recognition model
     distance_metric="euclidean_l2",  # Distance metric for similarity
     enforce_detection=True,  # Enforce face detection
     detector_backend="yolov8",  # Face detection backend
     threshold=None,  # Recognition threshold
-    device="cpu",  # Device to run the model ("cpu" or "gpu")
-    distance_threshold=0.9  # Distance threshold for matches
+    device="gpu",  # Device to run the model ("cpu" or "gpu")
+    distance_threshold=0.9,  # Distance threshold for matches
+    mongo_ip="localhost",  # MongoDB IP address
+    mongo_port=27017  # MongoDB port
 )
 ```
 
-### **Step 3: Run Face Identification**
+#### **Step 3: Manage Reference Images in Database**
 
-To identify faces in a video using a reference image folder:
+Add images to the database:
 
 ```python
-images_details = face_sim_class.face_id(
-    video_path="path/to/your/video.mp4",  # Path to input video
-    folder_path="path/to/folder/with/images/"  # Reference folder containing images
+face_sim_class.update_db([
+    "examples/References/_DSC0010.jpg",
+    "examples/References/_DSC0619.jpg"
+])
+```
+
+Remove specific identity or clear entire collection:
+
+```python
+# Remove a specific identity
+face_sim_class.remove_identity(identity="specific_image")
+
+# Clear all identities from database
+face_sim_class.remove_identity()
+```
+
+#### **Step 4: Run Face Identification**
+
+To identify faces in a video using the reference images stored in the database:
+
+```python
+result = face_sim_class.face_id(
+    video_path="examples/Videos/video_2025-02-22_22-54-35.mp4"  # Path to input video
 )
 ```
 
-### **Example Output Format**
+### Method 2: Use APIs
 
-```json
-[
-    {"identity": "examples\\/References\\\\_DSC0436.jpg", "hash": "d86977889d2ea81639b9757ff234fdd10d9a3b28",
-     "target_x": 1687, "target_y": 1335, "target_w": 671, "target_h": 975, "source_x": 181, "source_y": 247,
-     "source_w": 153, "source_h": 237, "threshold": 1.04, "distance": 0.6998609872},
-    
-    {"identity": "examples\\/References\\\\_DSC0494.jpg", "hash": "a490a834601772798966003f6cf71362504e3d18",
-     "target_x": 1452, "target_y": 2121, "target_w": 625, "target_h": 848, "source_x": 181, "source_y": 247,
-     "source_w": 153, "source_h": 237, "threshold": 1.04, "distance": 0.7038239059},
-    
-    {"identity": "examples\\/References\\\\_DSC0619.jpg", "hash": "b79c6671cdd4a0ada1e5c309a480e5bd749a4967",
-     "target_x": 1480, "target_y": 1945, "target_w": 788, "target_h": 1163, "source_x": 164, "source_y": 255,
-     "source_w": 154, "source_h": 238, "threshold": 1.04, "distance": 0.7189472668},
-    
-    {"identity": "examples\\/References\\\\_DSC0628.jpg", "hash": "9d9eb772f6a5f92a80a375fb9e56bf0dfe0ed491",
-     "target_x": 2097, "target_y": 2058, "target_w": 1164, "target_h": 1647, "source_x": 164, "source_y": 255,
-     "source_w": 154, "source_h": 238, "threshold": 1.04, "distance": 0.860808437}
-]
+#### **Step 1: Start the API Service**
+
+Run the API using either:
+
+```bash
+python api.py
 ```
 
-### **Important Notes:**
+OR (with Docker):
 
-1. **Reference Folder Handling:**
-    - If your reference folder is **fixed**, define it in `global_folder_path` when creating the instance.
-    - If your reference folder **changes frequently**, set `folder_path` in `face_id`.
-    - **One of these must be `None`** to avoid conflicts.
+```bash
+docker compose up --build
+```
 
-2. **First-Time Model Download:**
-    - The first time you run the service, it may take a while to download the required models.
-    - The first time you process a **new reference folder**, feature extraction might take time. However, if the folder
-      remains unchanged, the system **will not reprocess the images** in future runs.
+#### **Step 2: Access Methods**
+
+- Gradio UI: Run app.py for a web interface
+
+- Postman/curl: Send requests to http://localhost:5000
+
+- Any HTTP client: Compatible with all standard API tools
+
+## Notes
+
+### **3. Important Note**
+
+You can modify default configurations in `config.yaml` without changing code. 
+The file supports all FaceIdentification parameters and API settings.
+
+### **2. Example Output Format**
+
+The face_id method returns a dictionary containing:
+
+```python
+{
+    'time': {
+        'video_processing_time': 3.74,  # Time taken for video processing
+        'face_matching_time': 0.63  # Time taken for face matching
+    },
+    'image_path': [
+        '_DSC0619.jpg',  # Matched reference images
+        'DSC0494.jpg',
+        'DSC0436.jpg'
+    ]
+}
+```
+
+### **3. API Endpoints**
+
+#### `POST /initialize`
+
+Initialize the FaceIdentification system with optional configuration.
+
+**Request:**
+```json
+{
+    "face_detector_path": "models/yolov8n-face.pt",
+    "every_nth": 5,
+    "max_frames": 1,
+    "model_name": "Facenet512",
+    ... (all FaceIdentification parameters)
+}
+```
+
+#### `POST /update_db`
+
+Add reference images via file upload or paths.
+
+Methods:
+
+1. File upload (multipart/form-data):
+
+ - Field name: images
+
+ - Multiple files supported
+
+2. JSON payload:
+
+**Request:**
+```json
+{"image_paths": ["path/to/image1.jpg", "path/to/image2.jpg"]}
+```
+
+#### `GET /get_identities`
+
+List all stored identities.
+
+**Request:**
+```json
+{"identities": ["person1", "person2"]}
+```
+
+#### `POST /remove_identity`
+
+Remove specific identity or all identities.
+
+**Request:**
+```json
+{"identity": "person_name"}  // Omit to remove all
+```
+
+#### `POST /face_id`
+
+Process video for face identification.
+
+Methods:
+
+1. File upload (multipart/form-data):
+
+ - Field name: video
+
+2. JSON payload:
+
+**Request:**
+```json
+{"video_path": "path/to/video.mp4"}
+```
