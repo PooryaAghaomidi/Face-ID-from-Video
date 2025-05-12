@@ -77,6 +77,16 @@ def get_identities():
     return jsonify({'identities': identities})
 
 
+@app.route('/get_users', methods=['GET'])
+def get_users():
+    global face_identifier
+    if face_identifier is None:
+        return jsonify({'error': 'System not initialized. Call /initialize first.'}), 400
+
+    users = face_identifier.get_users()
+    return jsonify({'users': users})
+
+
 @app.route('/remove_identity', methods=['POST'])
 def remove_identity():
     global face_identifier
@@ -90,52 +100,56 @@ def remove_identity():
     return jsonify({'message': f'Identity "{identity}" removed.' if identity else 'All identities removed.'})
 
 
-@app.route('/face_id', methods=['POST'])
-def face_id():
+@app.route('/store_faces', methods=['POST'])
+def store_faces():
     global face_identifier
 
     if face_identifier is None:
         logging.error("Face identifier not initialized. Call /initialize first.")
         return jsonify({'error': 'System not initialized. Call /initialize first.'}), 400
 
-    video_path: Optional[str] = None
+    if 'user_id' not in request.form:
+        return jsonify({'error': 'user_id is required in form data.'}), 400
 
-    if 'video' in request.files:
-        video_file = request.files['video']
+    user_id = request.form['user_id']
 
-        if video_file.filename == '':
-            logging.warning("Empty video file uploaded.")
-            return jsonify({'error': 'No video file selected.'}), 400
-        
-        filename = secure_filename(video_file.filename)
-        video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        video_file.save(video_path)
+    if 'video' not in request.files or request.files['video'].filename == '':
+        logging.warning("No video file provided.")
+        return jsonify({'error': 'No video file provided.'}), 400
 
-    elif request.is_json:
-        data = request.get_json()
-        video_path = data.get('video_path')
+    video_file = request.files['video']
+    filename = secure_filename(video_file.filename)
+    video_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    video_file.save(video_path)
 
-        if not video_path:
-            logging.warning("No video_path provided in JSON payload.")
-            return jsonify({'error': 'No video_path provided in JSON.'}), 400
+    success = face_identifier.store_video(video_path, user_id)
+    if success:
+        return jsonify({'message': f'Frames stored for user {user_id}.'}), 200
+    else:
+        return jsonify({'error': 'Failed to store frames.'}), 500
 
-    if not video_path or not os.path.exists(video_path):
-        logging.error(f"Invalid video path: {video_path}")
-        return jsonify({'error': 'No valid video provided.'}), 400
+
+@app.route('/match_faces/<user_id>', methods=['GET'])
+def match_faces(user_id):
+    global face_identifier
+
+    if face_identifier is None:
+        logging.error("Face identifier not initialized. Call /initialize first.")
+        return jsonify({'error': 'System not initialized. Call /initialize first.'}), 400
 
     try:
-        result = face_identifier.face_id(video_path)
+        result = face_identifier.face_id(user_id)
         logging.info(
-            f"Face ID processed successfully. "
+            f"Face match completed for user '{user_id}'. "
             f"Time: {result['time']}, Matches: {len(result['image_path'])}"
         )
         return jsonify({
             "matches": result["image_path"],
             "time": result["time"]
-            })
+        })
     except Exception as e:
-        logging.error(f"Face ID processing failed: {str(e)}", exc_info=True)
-        return jsonify({'error': 'Internal server error during face identification.'}), 500
+        logging.error(f"Error during face match: {e}", exc_info=True)
+        return jsonify({'error': 'Internal server error during face matching.'}), 500
 
 
 @app.route('/')

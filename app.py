@@ -59,41 +59,42 @@ def call_update_db(files, progress=gr.Progress()):
         return [f"Error: {str(e)}"]
 
 
-def call_get_identities():
-    try:
-        response = requests.get(f"{BASE_URL}/get_identities")
-        result = response.json()
-        return [[identity] for identity in result.get("identities", [])]
-    except Exception as e:
-        return [f"Error: {str(e)}"]
-
-
-def call_face_id(video_file, progress=gr.Progress()):
-    progress(0, desc="Uploading video...")
+def upload_and_store_faces(video_file, user_id, progress=gr.Progress()):
+    progress(0, desc="Uploading and storing frames...")
 
     try:
         files = {"video": (os.path.basename(video_file.name), open(video_file.name, "rb"))}
-        response = requests.post(f"{BASE_URL}/face_id", files=files)
+        data = {"user_id": user_id}
+        response = requests.post(f"{BASE_URL}/store_faces", files=files, data=data)
+
+        if response.status_code != 200:
+            return f"❌ Error: {response.json().get('error', 'Unknown error')}"
+        
+        progress(1)
+        return f"✅ Successfully stored frames for user '{user_id}'"
+    except Exception as e:
+        return f"❌ Exception: {str(e)}"
+
+def match_faces_by_user_id(user_id, progress=gr.Progress()):
+    progress(0, desc="Matching faces...")
+
+    try:
+        response = requests.get(f"{BASE_URL}/match_faces/{user_id}")
         result = response.json()
 
-        progress(1)
+        if response.status_code != 200:
+            return [[f"❌ Error: {result.get('error', 'Unknown error')}"]], ""
 
-        matches_raw = result.get("matches", "[]")
+        matches = result.get("matches", [])
         time_data = result.get("time", {})
 
-        matches = json.loads(matches_raw) if isinstance(matches_raw, str) else matches_raw
         formatted_matches = [[identity] for identity in matches]
-        
-        time_str = (
-            f"Video Processing: {time_data.get('video_processing_time', 0):.2f}s\n"
-            f"Face Matching: {time_data.get('face_matching_time', 0):.2f}s\n"
-            f"Total: {sum(time_data.values()):.2f}s"
-        )
+        time_str =(f"Time: {time_data}s\n")
 
         progress(1)
         return formatted_matches, time_str
     except Exception as e:
-        return [f"Error: {str(e)}"]
+        return [[f"❌ Exception: {str(e)}"]], ""
 
 
 # --- GRADIO UI ---
@@ -109,27 +110,42 @@ with gr.Blocks() as demo:
 
         add_button.click(fn=call_update_db, inputs=[image_input], outputs=[add_output])
 
-    with gr.Tab("🧠 View Identities"):
-        get_button = gr.Button("Get Identities")
-        identities_output = gr.List(label="Current Identities")
-
-        get_button.click(fn=call_get_identities, inputs=[], outputs=[identities_output])
-
-    with gr.Tab("🎥 Identify from Video"):
+    with gr.Tab("📥 Upload & Store Faces"):
         with gr.Row():
-            video_input = gr.File(file_types=[".mp4"], file_count="single", label="Select a video")
-        
-        identify_button = gr.Button("Identify Faces")
+            store_video_input = gr.File(file_types=[".mp4"], file_count="single", label="Upload Video")
+            store_user_id_input = gr.Textbox(label="User ID", placeholder="Enter user ID")
+
+        store_button = gr.Button("Store Faces")
+        store_status = gr.Textbox(label="Status", interactive=False)
+
+        store_button.click(
+            fn=upload_and_store_faces,
+            inputs=[store_video_input, store_user_id_input],
+            outputs=[store_status]
+        )
+
+    with gr.Tab("🔍 Match Faces"):
+        with gr.Row():
+            match_user_id_input = gr.Textbox(label="User ID", placeholder="Enter user ID")
+
+        match_button = gr.Button("Find Matches")
 
         with gr.Row():
-            matches_output = gr.List(label="Matched Identities",
-                                     headers=["Identity"],
-                                     interactive=False)
-            time_output = gr.Textbox(label="Processing Time",
-                                     interactive=False)
-        
-        identify_button.click(fn=call_face_id,
-                              inputs=[video_input],
-                              outputs=[matches_output, time_output])
+            matches_output = gr.List(
+                label="Matched Identities",
+                headers=["Identity"],
+                interactive=False
+            )
+            time_output = gr.Textbox(
+                label="Processing Time",
+                interactive=False
+            )
+
+        match_button.click(
+            fn=match_faces_by_user_id,
+            inputs=[match_user_id_input],
+            outputs=[matches_output, time_output]
+        )
+
         
 demo.launch(server_name="0.0.0.0", server_port=7860)

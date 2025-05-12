@@ -4,10 +4,11 @@ import sys
 # Make sure 'modules' is in the path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), 'modules')))
 
+import cv2
 import yaml
-import json
 import torch
 import logging
+import numpy as np
 import pandas as pd
 from time import time
 import tensorflow as tf
@@ -86,6 +87,7 @@ class FaceIdentification:
             client = MongoClient(f"mongodb://{mongo_ip}:{mongo_port}/")
             db = client["gallery"]
             self.collection = db["images"]
+            self.users = db["users"]
             self.documents = list(self.collection.find())
         except Exception as e:
             logging.error(f"Failed to connect to MongoDB: {e}")
@@ -135,6 +137,14 @@ class FaceIdentification:
         """
         return [os.path.basename(doc['identity']) for doc in self.collection.find({}, {'identity': 1, '_id': 0})]
     
+    def get_users(self) -> List[dict]:
+        """
+        Retrieves a list of all 'users' values from the database.
+
+        :return: List of identity strings.
+        """
+        return [doc['user_id'] for doc in self.users.find({}, {'user_id': 1, '_id': 0})]
+    
     def remove_identity(self, identity: Optional[str] = None) -> None:
         """
         Removes a specific identity or clears the entire collection.
@@ -149,51 +159,69 @@ class FaceIdentification:
             logging.info(f"Removed all documents from the collection.")
         self.documents = list(self.collection.find())
 
-    def face_id(self, video_path: str) -> dict:
+    def store_video(self, video_path: str, user_id: str) -> bool:
         """
-        Identifies faces from a video by matching them against a database.
+        Extracts key frames from a video and stores them in MongoDB under the given user_id.
 
         :param video_path: Path to the input video.
-        :return: Dictionary containing identified faces and processing times.
-                Format: {
-                    "time": {
-                        "video_processing_time": float,
-                        "face_matching_time": float
-                    },
-                    "image_path": list[str]  # list of matched identities
-                }
+        :param user_id: Unique identifier for the user.
+        :return: Boolean indicating success or failure.
         """
-        logging.info(f"Extracting frames from video: {video_path}")
+        logging.info(f"Extracting frames for user '{user_id}' from video: {video_path}")
+        try:
+            top_frames = self.preprocessor.extract_frames(video_path)
+            if not top_frames:
+                logging.warning(f"No frames extracted from video: {video_path}")
+                return False
+
+            # Convert frames to storable format (e.g., base64 or binary)
+            encoded_images = [cv2.imencode('.jpg', frame)[1].tobytes() for frame in top_frames]
+
+            self.users.update_one(
+                {"user_id": user_id},
+                {"$set": {"images": encoded_images}},
+                upsert=True
+            )
+            logging.info(f"Stored {len(encoded_images)} frames for user '{user_id}' in database.")
+            return True
+        except Exception as e:
+            logging.error(f"Failed to store frames for user '{user_id}': {e}")
+            return False
+
+    def face_id(self, user_id: str) -> dict:
+        """
+        Retrieves stored user images from MongoDB and performs face identification.
+
+        :param user_id: Unique identifier for the user.
+        :return: Dictionary with matched identities and processing times.
+        """
+        logging.info(f"Retrieving stored frames for user '{user_id}'")
         response = {
-            "time": {},
+            "time": None,
             "image_path": []
         }
 
-        start_video_processing = time()
-        try:
-            top_frames = self.preprocessor.extract_frames(video_path)
-        except Exception as e:
-            logging.error(f"Error during frame extraction: {e}")
+        user_record = self.users.find_one({"user_id": user_id})
+        if not user_record or "images" not in user_record:
+            logging.warning(f"No images found in database for user '{user_id}'")
             return response
-        response["time"]["video_processing_time"] = time() - start_video_processing
 
-        if not top_frames:
-            logging.warning("No frames extracted, returning empty result.")
-            return response
+        stored_images = user_record["images"]
 
         start_face_matching = time()
         matched_faces = []
-        for frame in top_frames:
+        for img_bytes in stored_images:
             try:
-                df = self.identification.identify_face(image=frame, documents=self.documents)
+                np_img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+                df = self.identification.identify_face(image=np_img, documents=self.documents)
                 if df is not None:
                     matched_faces.append(df)
             except Exception as e:
-                logging.error(f"Error identifying face in frame: {e}")
-        response["time"]["face_matching_time"] = time() - start_face_matching
+                logging.error(f"Error identifying face from stored image: {e}")
+        response["time"] = time() - start_face_matching
 
         if not matched_faces:
-            logging.info("No faces matched, returning empty result.")
+            logging.info("No faces matched for stored user images.")
             return response
 
         try:
@@ -201,10 +229,9 @@ class FaceIdentification:
             filtered_df = final_df[final_df["distance"] < self.distance_threshold]
             filtered_df = filtered_df.sort_values(by="distance").drop_duplicates(subset="identity", keep="first")
 
-            logging.info("Face identification completed successfully.")
-            response["image_path"] = [os.path.basename(identity) for identity in filtered_df['identity']]
+            response["image_path"] = [os.path.basename(identity) for identity in filtered_df["identity"]]
+            logging.info(f"Face matching completed for user '{user_id}'.")
         except Exception as e:
-            logging.error(f"Error processing final DataFrame: {e}")
+            logging.error(f"Error processing final matched DataFrame: {e}")
             
         return response
-        
