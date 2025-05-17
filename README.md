@@ -112,14 +112,20 @@ face_sim_class.remove_identity(identity="specific_image")
 face_sim_class.remove_identity()
 ```
 
-#### **Step 4: Run Face Identification**
+#### **Step 4: Upload a Video and assign a user id**
 
-To identify faces in a video using the reference images stored in the database:
+Upload a video with a user id before looking for that person's matched images:
 
 ```python
-result = face_sim_class.face_id(
-    video_path="examples/Videos/video_2025-02-22_22-54-35.mp4"  # Path to input video
-)
+response = face_sim_class.store_video(video_path="path/to/image", user_id="123456789")
+```
+
+#### **Step 5: Find Matched Images**
+
+Find matched images that belong to the entered user id:
+
+```python
+identities = face_sim_class.face_id("123456789")
 ```
 
 ### Method 2: Use APIs
@@ -159,15 +165,13 @@ The face_id method returns a dictionary containing:
 
 ```python
 {
-    'time': {
-        'video_processing_time': 3.74,  # Time taken for video processing
-        'face_matching_time': 0.63  # Time taken for face matching
-    },
+    'time': 0.45703601837158203,
     'image_path': [
-        '_DSC0619.jpg',  # Matched reference images
-        'DSC0494.jpg',
-        'DSC0436.jpg'
-    ]
+            '_DSC0619.jpg',
+            'DSC0619.jpg',
+            'DSC0494.jpg',
+            'DSC0436.jpg'
+                ]
 }
 ```
 
@@ -225,19 +229,53 @@ Remove specific identity or all identities.
 {"identity": "person_name"}  // Omit to remove all
 ```
 
-#### `POST /face_id`
+#### `GET /get_users`
 
-Process video for face identification.
+Retrieve all registered users in the system.
 
-Methods:
+Response:
 
-1. File upload (multipart/form-data):
+```json
+{
+  "users": ["user1", "user2", "user3"]
+}
+```
 
- - Field name: video
+#### `POST /store_faces`
 
-2. JSON payload:
+Extract and store face frames from a video for a specific user.
 
 **Request:**
+
+ - Content-Type: multipart/form-data
+
+ - Fields:
+
+    - user_id: Identifier for the user (string)
+
+    - video: Video file for face extraction
+  
+**Response:**
+
 ```json
-{"video_path": "path/to/video.mp4"}
+{
+  "message": "Frames stored for user user123."
+}
+```
+
+
+#### `GET /match_faces/<user_id>`
+
+Match extracted face frames against known identities for a specific user.
+
+Path Parameter:
+ - `user_id`: Identifier of the user to match faces for.
+
+**Response:**
+
+```json
+{
+  "matches": ["identity1", "identity2"],
+  "time": 0.456
+}
 ```
